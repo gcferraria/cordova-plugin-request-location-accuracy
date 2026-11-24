@@ -1,47 +1,45 @@
 <?xml version="1.0" encoding="UTF-8"?>
-<plugin xmlns="http://www.phonegap.com/ns/plugins/1.0"
+<plugin xmlns="http://apache.org/cordova/ns/plugins/1.0"
     xmlns:android="http://schemas.android.com/apk/res/android"
     id="cordova-plugin-request-location-accuracy"
-    version="2.3.0">
+    version="3.0.0">
 
     <name>Request Location Accuracy</name>
-    <description>Cordova/Phonegap plugin for Android and iOS to request enabling/changing of Location Services by triggering a native dialog</description>
+    <description>Cordova plugin for Android and iOS that asks the user to turn on location (and, on Android, the requested location accuracy) through the native system dialog.</description>
     <author>Dave Alden</author>
-    <engines>
-        <engine name="cordova" version=">=3.0.0" />
-    </engines>
-    
-    <repo>https://github.com/dpa99c/cordova-plugin-request-location-accuracy.git</repo>
-    <issue>https://github.com/dpa99c/cordova-plugin-request-location-accuracy/issues</issue>
-    <keywords>ecosystem:cordova,cordova,phonegap,android,diagnostic,location,accuracy,high accuracy,fine accuracy,gps,settings</keywords>
     <license>MIT</license>
+    <keywords>ecosystem:cordova,cordova,android,ios,location,accuracy,high accuracy,gps,settings</keywords>
+    <repo>https://github.com/gcferraria/cordova-plugin-request-location-accuracy.git</repo>
+    <issue>https://github.com/gcferraria/cordova-plugin-request-location-accuracy/issues</issue>
+
+    <engines>
+        <engine name="cordova" version=">=10.0.0" />
+        <engine name="cordova-android" version=">=10.0.0" />
+        <engine name="cordova-ios" version=">=6.0.0" />
+    </engines>
+
+    <js-module src="www/RequestLocationAccuracy.js" name="RequestLocationAccuracy">
+        <clobbers target="cordova.plugins.locationAccuracy" />
+    </js-module>
 
     <platform name="android">
-        <config-file target="config.xml" parent="/*">
-            <feature name="RequestLocationAccuracy" >
-                <param name="android-package" value="cordova.plugin.RequestLocationAccuracy"/>
+        <config-file target="res/xml/config.xml" parent="/*">
+            <feature name="RequestLocationAccuracy">
+                <param name="android-package" value="cordova.plugin.RequestLocationAccuracy" />
             </feature>
         </config-file>
 
-        <js-module src="www/android/RequestLocationAccuracy.js" name="RequestLocationAccuracy">
-            <clobbers target="cordova.plugins.locationAccuracy" />
-        </js-module>
-
         <source-file src="src/android/RequestLocationAccuracy.java" target-dir="src/cordova/plugin" />
 
-        <preference name="PLAY_SERVICES_LOCATION_VERSION" default="16.+" />
+        <!-- play-services-location 21+ is required: the plugin uses LocationRequest.Builder and Priority. -->
+        <preference name="PLAY_SERVICES_LOCATION_VERSION" default="21.3.0" />
         <framework src="com.google.android.gms:play-services-location:$PLAY_SERVICES_LOCATION_VERSION" />
     </platform>
 
     <platform name="ios">
-
-        <js-module src="www/ios/RequestLocationAccuracy.js" name="RequestLocationAccuracy">
-            <clobbers target="cordova.plugins.locationAccuracy" />
-        </js-module>
-
         <config-file target="config.xml" parent="/*">
             <feature name="RequestLocationAccuracy">
-                <param name="ios-package" value="RequestLocationAccuracy"/>
+                <param name="ios-package" value="RequestLocationAccuracy" />
             </feature>
         </config-file>
 

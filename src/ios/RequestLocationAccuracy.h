@@ -1,10 +1,15 @@
+/*
+ * Request Location Accuracy plugin
+ *
+ * Copyright (c) 2016 Dave Alden (Working Edge Ltd.)
+ * Copyright (c) 2026 Gonçalo Ferraria
+ *
+ * Licensed under the MIT License. See LICENSE.
+ */
 #import <Cordova/CDVPlugin.h>
 #import <CoreLocation/CoreLocation.h>
 
-
-@interface RequestLocationAccuracy : CDVPlugin <CLLocationManagerDelegate>{
-@private BOOL __locationStarted;
-}
+@interface RequestLocationAccuracy : CDVPlugin <CLLocationManagerDelegate>
 
 @property (nonatomic, strong) CLLocationManager* locationManager;
 

@@ -1,118 +1,111 @@
+/*
+ * Request Location Accuracy plugin
+ *
+ * Copyright (c) 2016 Dave Alden (Working Edge Ltd.)
+ * Copyright (c) 2026 Gonçalo Ferraria
+ *
+ * Licensed under the MIT License. See LICENSE.
+ */
 #import "RequestLocationAccuracy.h"
 
-@implementation RequestLocationAccuracy
+// Result codes (must match www/RequestLocationAccuracy.js)
+static const int SUCCESS_SETTINGS_SATISFIED = 0;
+static const int SUCCESS_PROMPT_REQUESTED = 2;
+static const int ERROR_ALREADY_REQUESTING = -1;
+static const int ERROR_EXCEPTION = 2;
 
-// Initialization
+@implementation RequestLocationAccuracy {
+    BOOL _locationStarted;
+}
+
 @synthesize locationManager;
 
 - (void)pluginInitialize
 {
     self.locationManager = [[CLLocationManager alloc] init];
     self.locationManager.delegate = self;
-    __locationStarted = NO;
+    _locationStarted = NO;
 }
 
-// Plugin API
-- (void) request:(CDVInvokedUrlCommand*)command;{
-    CDVPluginResult* pluginResult;
-    @try {
-        if (__locationStarted) {
-            pluginResult = [CDVPluginResult resultWithStatus:CDVCommandStatus_ERROR messageAsString:@"Location is already being requested"];
-        }else if(![self canRequest]){
-            // Location services is already enabled
-            pluginResult = [CDVPluginResult resultWithStatus:CDVCommandStatus_OK];
-        }else{
-            [self.locationManager startUpdatingLocation];
-            __locationStarted = YES;
-            pluginResult = [CDVPluginResult resultWithStatus:CDVCommandStatus_OK];
-        }
-    }@catch (NSException *exception) {
-        pluginResult = [CDVPluginResult resultWithStatus:CDVCommandStatus_ERROR messageAsString:exception.reason];
-    }
-    [self.commandDelegate sendPluginResult:pluginResult callbackId:command.callbackId];
-}
+#pragma mark - Plugin API
 
-- (void) isRequesting:(CDVInvokedUrlCommand*)command;{
-    int result;
-    if(__locationStarted){
-        result = 1;
-    }else{
-        result = 0;
-    }
-    [self.commandDelegate sendPluginResult:[CDVPluginResult resultWithStatus:CDVCommandStatus_OK messageAsInt:result] callbackId:command.callbackId];
-}
-
-- (void) canRequest:(CDVInvokedUrlCommand*)command;{
-    int result;
-    if([self canRequest]){
-        result = 1;
-    }else{
-        result = 0;
-    }
-    [self.commandDelegate sendPluginResult:[CDVPluginResult resultWithStatus:CDVCommandStatus_OK messageAsInt:result] callbackId:command.callbackId];
-}
-
-// Internals
-
-- (BOOL) canRequest
+- (void) request:(CDVInvokedUrlCommand*)command
 {
-    return ![self isLocationServicesEnabled] && !__locationStarted;
+    // +[CLLocationManager locationServicesEnabled] can block, so it must not run on the main thread (iOS 16+ warns about it).
+    [self.commandDelegate runInBackground:^{
+        BOOL servicesEnabled = [CLLocationManager locationServicesEnabled];
+
+        dispatch_async(dispatch_get_main_queue(), ^{
+            CDVPluginResult* pluginResult;
+            @try {
+                if (self->_locationStarted) {
+                    pluginResult = [self errorResult:@"Location is already being requested" code:ERROR_ALREADY_REQUESTING];
+                } else if (servicesEnabled) {
+                    pluginResult = [self okResult:@"Location Services are already enabled." code:SUCCESS_SETTINGS_SATISFIED];
+                } else {
+                    // With Location Services off, starting location updates makes iOS show its
+                    // "Turn On Location Services" alert, which links to the Settings app.
+                    [self.locationManager startUpdatingLocation];
+                    self->_locationStarted = YES;
+                    pluginResult = [self okResult:@"The system prompt to turn on Location Services was requested." code:SUCCESS_PROMPT_REQUESTED];
+                }
+            } @catch (NSException *exception) {
+                pluginResult = [self errorResult:(exception.reason ?: exception.name) code:ERROR_EXCEPTION];
+            }
+            [self.commandDelegate sendPluginResult:pluginResult callbackId:command.callbackId];
+        });
+    }];
 }
 
-
-- (void)stopRequestingLocation
+- (void) isRequesting:(CDVInvokedUrlCommand*)command
 {
-    if (__locationStarted) {
+    [self.commandDelegate sendPluginResult:[CDVPluginResult resultWithStatus:CDVCommandStatus_OK messageAsInt:(_locationStarted ? 1 : 0)]
+                                callbackId:command.callbackId];
+}
+
+- (void) canRequest:(CDVInvokedUrlCommand*)command
+{
+    [self.commandDelegate runInBackground:^{
+        BOOL servicesEnabled = [CLLocationManager locationServicesEnabled];
+        dispatch_async(dispatch_get_main_queue(), ^{
+            BOOL canRequest = !servicesEnabled && !self->_locationStarted;
+            [self.commandDelegate sendPluginResult:[CDVPluginResult resultWithStatus:CDVCommandStatus_OK messageAsInt:(canRequest ? 1 : 0)]
+                                        callbackId:command.callbackId];
+        });
+    }];
+}
+
+#pragma mark - Internals
+
+- (CDVPluginResult*) okResult:(NSString*)message code:(int)code
+{
+    return [CDVPluginResult resultWithStatus:CDVCommandStatus_OK messageAsDictionary:@{ @"code": @(code), @"message": message }];
+}
+
+- (CDVPluginResult*) errorResult:(NSString*)message code:(int)code
+{
+    NSLog(@"RequestLocationAccuracy: %@", message);
+    return [CDVPluginResult resultWithStatus:CDVCommandStatus_ERROR messageAsDictionary:@{ @"code": @(code), @"message": message }];
+}
+
+- (void) stopRequestingLocation
+{
+    if (_locationStarted) {
         [self.locationManager stopUpdatingLocation];
-        __locationStarted = NO;
+        _locationStarted = NO;
     }
 }
 
-- (BOOL)isAuthorized
-{
-    BOOL authorizationStatusClassPropertyAvailable = [CLLocationManager respondsToSelector:@selector(authorizationStatus)]; // iOS 4.2+
+#pragma mark - CLLocationManagerDelegate
 
-    if (authorizationStatusClassPropertyAvailable) {
-        NSUInteger authStatus = [CLLocationManager authorizationStatus];
-#ifdef __IPHONE_8_0
-        if ([self.locationManager respondsToSelector:@selector(requestWhenInUseAuthorization)]) {  //iOS 8.0+
-            return (authStatus == kCLAuthorizationStatusAuthorizedWhenInUse) || (authStatus == kCLAuthorizationStatusAuthorizedAlways) || (authStatus == kCLAuthorizationStatusNotDetermined);
-        }
-#endif
-        return (authStatus == kCLAuthorizationStatusAuthorized) || (authStatus == kCLAuthorizationStatusNotDetermined);
-    }
-
-    // by default, assume YES (for iOS < 4.2)
-    return YES;
-}
-
-- (BOOL)isLocationServicesEnabled
-{
-    BOOL locationServicesEnabledInstancePropertyAvailable = [self.locationManager respondsToSelector:@selector(locationServicesEnabled)]; // iOS 3.x
-    BOOL locationServicesEnabledClassPropertyAvailable = [CLLocationManager respondsToSelector:@selector(locationServicesEnabled)]; // iOS 4.x
-
-    if (locationServicesEnabledClassPropertyAvailable) { // iOS 4.x
-        return [CLLocationManager locationServicesEnabled];
-    } else if (locationServicesEnabledInstancePropertyAvailable) { // iOS 2.x, iOS 3.x
-        return [(id)self.locationManager locationServicesEnabled];
-    } else {
-        return NO;
-    }
-}
-
-#pragma mark - locationManager delegate
-
-- (void)locationManager:(CLLocationManager*)manager
-    didUpdateToLocation:(CLLocation*)newLocation
-           fromLocation:(CLLocation*)oldLocation
+- (void)locationManager:(CLLocationManager*)manager didUpdateLocations:(NSArray<CLLocation*>*)locations
 {
     [self stopRequestingLocation];
-
 }
 
 - (void)locationManager:(CLLocationManager*)manager didFailWithError:(NSError*)error
 {
-    NSLog(@"locationManager::didFailWithError %@", [error localizedFailureReason]);
+    NSLog(@"RequestLocationAccuracy: locationManager didFailWithError %@", error.localizedDescription);
     [self stopRequestingLocation];
 }
 
